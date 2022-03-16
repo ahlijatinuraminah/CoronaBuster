@@ -1,4 +1,8 @@
 import Phaser from 'phaser'
+import FallingObject from '../ui/FallingObject.js'
+import Laser from '../ui/Laser.js'
+import ScoreLabel from '../ui/ScoreLabel.js'
+
 export default class CoronaBusterScene extends Phaser.Scene
 {
     constructor()
@@ -14,6 +18,11 @@ export default class CoronaBusterScene extends Phaser.Scene
         this.player = undefined
         this.speed = 100
         this.cursor = undefined
+        this.enemies = undefined
+        this.enemySpeed = 60
+        this.lasers = undefined
+        this.lastFired = 0
+        this.scoreLabel = undefined
     }
     
     preload()
@@ -24,6 +33,11 @@ export default class CoronaBusterScene extends Phaser.Scene
         this.load.image('right-btn', 'images/right-btn.png')
         this.load.image('shoot-btn', 'images/shoot-btn.png')
         this.load.spritesheet('player', 'images/ship.png', {frameWidth:66, frameHeight:66})
+        this.load.image('enemy', 'images/enemy.png')
+        this.load.spritesheet('laser', 'images/laser-bolts.png', { 
+            frameWidth: 16, frameHeight:32, 
+            startFrame:16, endFrame:32
+        })
     }
     
     create()
@@ -43,6 +57,29 @@ export default class CoronaBusterScene extends Phaser.Scene
 
         this.cursors = this.input.keyboard.createCursorKeys()
 
+        this.enemies= this.physics.add.group({
+            classType : FallingObject,
+            //banyaknya enemy dalam satu kali grup
+            maxSize : 10,
+            runChildUpdate : true
+        })
+
+        this.time.addEvent({
+            delay: 2000,
+            callback: this.spawnEnemy,
+            callbackScope: this,
+            loop: true
+        })
+
+        this.lasers = this.physics.add.group({
+            classType: Laser,
+            maxSize: 10,
+            runChildUpdate: true
+        })
+
+        this.physics.add.overlap(this.lasers, this.enemies, this.hitEnemy, null, this)
+        this.scoreLabel = this.createScoreLabel(16, 16, 0)
+
     }
     
     update(time)
@@ -60,7 +97,7 @@ export default class CoronaBusterScene extends Phaser.Scene
             }
         })
 
-        this.movePlayer(this.player)
+        this.movePlayer(this.player, time)
     }
 
     createButton()
@@ -106,7 +143,7 @@ export default class CoronaBusterScene extends Phaser.Scene
         return player
     }
 
-    movePlayer(player){
+    movePlayer(player, time){
         if(this.cursors.left.isDown || this.nav_left){
             this.player.setVelocityX(this.speed * -1)
             this.player.anims.play('left', true)
@@ -120,5 +157,47 @@ export default class CoronaBusterScene extends Phaser.Scene
             this.player.anims.play('turn')
         }
 
+        if ((this.shoot) && time > this.lastFired || this.cursors.space.isDown){
+            const laser = this.lasers.get(0, 0, 'laser')
+            if(laser){
+                laser.fire(this.player.x, this.player.y)
+                this.lastFired = time + 150
+            }
+        }
+
+    }
+
+    spawnEnemy(){
+
+        const config = {
+            speed : this.enemySpeed,
+            rotation : 0.06
+        }
+        
+        const enemy = this.enemies.get(0,0, 'enemy', config)
+        const enemyWidth = enemy.displayWidth
+        const positionX = Phaser.Math.Between(enemyWidth, this.scale.width - enemyWidth)
+
+        if(enemy) {
+            enemy.spawn(positionX)
+        }
+    }
+
+    hitEnemy(laser, enemy){
+        laser.erase()
+        enemy.die()
+
+        this.scoreLabel.add(10)
+        if (this.scoreLabel.getScore() % 100 == 0){
+            this.enemySpeed += 30
+        }
+    }
+
+    createScoreLabel(x, y, score)
+    {
+        const style = { fontSize: '32px', fill: '#000'}
+        const label= new ScoreLabel(this, x, y, score, style).setDepth(1)
+        this.add.existing(label)
+        return label
     }
 }
