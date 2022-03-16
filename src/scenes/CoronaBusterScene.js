@@ -2,6 +2,7 @@ import Phaser from 'phaser'
 import FallingObject from '../ui/FallingObject.js'
 import Laser from '../ui/Laser.js'
 import ScoreLabel from '../ui/ScoreLabel.js'
+import LifeLabel from '../ui/LifeLabel.js'
 
 export default class CoronaBusterScene extends Phaser.Scene
 {
@@ -23,6 +24,9 @@ export default class CoronaBusterScene extends Phaser.Scene
         this.lasers = undefined
         this.lastFired = 0
         this.scoreLabel = undefined
+        this.lifeLabel = undefined
+        this.handsanitizer = undefined
+        this.backsound = undefined
     }
     
     preload()
@@ -38,6 +42,14 @@ export default class CoronaBusterScene extends Phaser.Scene
             frameWidth: 16, frameHeight:32, 
             startFrame:16, endFrame:32
         })
+
+        this.load.image('handsanitizer', 'images/handsanitizer.png')
+
+        this.load.audio('laserSound', 'sfx/sfx_laser.ogg')
+        this.load.audio('destroySound', 'sfx/destroy.mp3')
+        this.load.audio('handsanitizerSound', 'sfx/handsanitizer.mp3')
+        this.load.audio('backsound', 'sfx/backsound/SkyFire.ogg')
+        this.load.audio('gameOverSound', 'sfx/gameover.wav')
     }
     
     create()
@@ -79,6 +91,29 @@ export default class CoronaBusterScene extends Phaser.Scene
 
         this.physics.add.overlap(this.lasers, this.enemies, this.hitEnemy, null, this)
         this.scoreLabel = this.createScoreLabel(16, 16, 0)
+        this.lifeLabel = this.createLifeLabel(16, 43, 3)
+
+        this.physics.add.overlap(this.player, this.enemies, this.decreaseLife, null, this)
+
+        this.handsanitizer = this.physics.add.group({
+            classType: FallingObject,
+            runChildUpdate: true
+        })
+
+        this.time.addEvent({
+            delay: 10000,
+            callback: this.spawnHandsanitizer,
+            callbackScope: this,
+            loop: true
+        })
+
+        this.physics.add.overlap(this.player, this.handsanitizer, this.increaseLife, null, this)
+
+        this.backsound = this.sound.add('backsound')
+        var soundConfig= {
+            loop: true
+        }
+        this.backsound.play(soundConfig)
 
     }
     
@@ -162,6 +197,8 @@ export default class CoronaBusterScene extends Phaser.Scene
             if(laser){
                 laser.fire(this.player.x, this.player.y)
                 this.lastFired = time + 150
+
+                this.sound.play('laserSound')
             }
         }
 
@@ -187,17 +224,65 @@ export default class CoronaBusterScene extends Phaser.Scene
         laser.erase()
         enemy.die()
 
+        this.sound.play('destroySound')
+
         this.scoreLabel.add(10)
         if (this.scoreLabel.getScore() % 100 == 0){
             this.enemySpeed += 30
         }
     }
 
-    createScoreLabel(x, y, score)
-    {
+    createScoreLabel(x, y, score){
         const style = { fontSize: '32px', fill: '#000'}
-        const label= new ScoreLabel(this, x, y, score, style).setDepth(1)
+        const label = new ScoreLabel(this, x, y, score, style).setDepth(1)
         this.add.existing(label)
         return label
+    }
+
+    createLifeLabel(x, y, life){
+        const style = { fontSize: '32px', fill: '#FF0000'}
+        const label = new LifeLabel(this, x, y, life, style).setDepth(1)
+        this.add.existing(label)
+        return label
+    }
+
+    decreaseLife(player, enemy){
+        enemy.die()
+        this.lifeLabel.subtract(1)
+
+        if(this.lifeLabel.getLife() == 2){
+            player.setTint(0xff0000)
+        } else if(this.lifeLabel.getLife() == 1){
+            player.setTint(0xff0000).setAlpha(0.2)
+        } else if(this.lifeLabel.getLife() == 0) {
+            this.scene.start('game-over-scene', { score: this.scoreLabel.getScore() })
+
+            this.sound.stopAll()
+            this.sound.play('gameOverSound')
+        }
+    }
+    spawnHandsanitizer(){    
+        // const speed = 60
+        const config = {
+            speed : 100,
+            rotation : 0
+        }
+        const handsanitizer = this.handsanitizer.get(0, 0, 'handsanitizer', config)
+        const handsanitizerWidth = handsanitizer.displayWidth
+        const positionX = Phaser.Math.Between(handsanitizerWidth, this.scale.width - handsanitizerWidth)
+
+        if (handsanitizer) {
+            handsanitizer.spawn(positionX)
+        }
+    }
+
+    increaseLife(player, handsanitizer){
+        handsanitizer.die()
+        this.sound.play('handsanitizerSound')
+        this.lifeLabel.add(1)
+
+        if(this.lifeLabel.getLife()>= 3){
+            player.clearTint().setAlpha(2)
+        }
     }
 }
